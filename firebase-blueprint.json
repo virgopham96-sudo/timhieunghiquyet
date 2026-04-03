@@ -1,0 +1,23 @@
+{
+  "entities": {
+    "QuizResult": {
+      "title": "QuizResult",
+      "description": "A team's quiz result",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "User ID of the submitter" },
+        "teamName": { "type": "string", "description": "Name of the team" },
+        "score": { "type": "number", "description": "Score out of 25" },
+        "totalQuestions": { "type": "number", "description": "Total number of questions" },
+        "submittedAt": { "type": "string", "format": "date-time", "description": "Submission time" }
+      },
+      "required": ["uid", "teamName", "score", "totalQuestions", "submittedAt"]
+    }
+  },
+  "firestore": {
+    "/results/{resultId}": {
+      "schema": { "$ref": "#/entities/QuizResult" },
+      "description": "Stores quiz results for teams"
+    }
+  }
+}
