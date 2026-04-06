@@ -1,24 +1,21 @@
-import { useState, useEffect } from 'react';
-import { signInWithPopup, onAuthStateChanged, signOut, User } from 'firebase/auth';
-import { collection, addDoc, getDocs, query, orderBy, serverTimestamp, Timestamp } from 'firebase/firestore';
-import { auth, db, googleProvider } from './firebase';
+import { useState } from 'react';
 import { questions } from './data/questions';
-import { Trophy, LogOut, CheckCircle2, AlertCircle, Clock } from 'lucide-react';
+import { Trophy, CheckCircle2, AlertCircle, Clock, ArrowLeft } from 'lucide-react';
 
-type AppState = 'auth' | 'quiz' | 'result' | 'leaderboard';
+type AppState = 'setup' | 'quiz' | 'result' | 'leaderboard';
 
 interface QuizResult {
-  id?: string;
-  uid: string;
+  id: string;
   teamName: string;
   score: number;
   totalQuestions: number;
-  submittedAt: Timestamp;
+  submittedAt: number;
 }
 
+const LOCAL_STORAGE_KEY = 'quiz_results_v1';
+
 export default function App() {
-  const [user, setUser] = useState<User | null>(null);
-  const [appState, setAppState] = useState<AppState>('auth');
+  const [appState, setAppState] = useState<AppState>('setup');
   const [teamName, setTeamName] = useState('');
   const [answers, setAnswers] = useState<Record<number, string>>({});
   const [score, setScore] = useState(0);
@@ -26,38 +23,13 @@ export default function App() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
 
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-      setUser(currentUser);
-      if (currentUser && appState === 'auth') {
-        // Stay on auth to enter team name
-      }
-    });
-    return () => unsubscribe();
-  }, [appState]);
-
-  const handleLogin = async () => {
-    try {
-      setError('');
-      await signInWithPopup(auth, googleProvider);
-    } catch (err: any) {
-      setError(err.message || 'Đăng nhập thất bại');
-    }
-  };
-
-  const handleLogout = async () => {
-    await signOut(auth);
-    setAppState('auth');
-    setTeamName('');
-    setAnswers({});
-  };
-
   const startQuiz = () => {
     if (!teamName.trim()) {
       setError('Vui lòng nhập tên đội của bạn');
       return;
     }
     setError('');
+    setAnswers({});
     setAppState('quiz');
   };
 
@@ -65,10 +37,7 @@ export default function App() {
     setAnswers(prev => ({ ...prev, [questionId]: optionId }));
   };
 
-  const submitQuiz = async () => {
-    if (!user) return;
-    
-    // Check if all questions are answered
+  const submitQuiz = () => {
     if (Object.keys(answers).length < questions.length) {
       setError('Vui lòng trả lời tất cả các câu hỏi trước khi nộp bài');
       return;
@@ -86,36 +55,46 @@ export default function App() {
 
     setScore(calculatedScore);
 
+    const newResult: QuizResult = {
+      id: Math.random().toString(36).substring(2, 9),
+      teamName: teamName.trim(),
+      score: calculatedScore,
+      totalQuestions: questions.length,
+      submittedAt: Date.now()
+    };
+
     try {
-      await addDoc(collection(db, 'results'), {
-        uid: user.uid,
-        teamName: teamName.trim(),
-        score: calculatedScore,
-        totalQuestions: questions.length,
-        submittedAt: serverTimestamp()
-      });
+      const existing = JSON.parse(localStorage.getItem(LOCAL_STORAGE_KEY) || '[]');
+      existing.push(newResult);
+      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(existing));
       setAppState('result');
-    } catch (err: any) {
+    } catch (err) {
       console.error(err);
-      setError('Có lỗi xảy ra khi lưu kết quả. Vui lòng thử lại.');
+      setError('Có lỗi xảy ra khi lưu kết quả.');
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const fetchLeaderboard = async () => {
+  const fetchLeaderboard = () => {
     try {
-      const q = query(collection(db, 'results'), orderBy('score', 'desc'), orderBy('submittedAt', 'asc'));
-      const querySnapshot = await getDocs(q);
-      const results: QuizResult[] = [];
-      querySnapshot.forEach((doc) => {
-        results.push({ id: doc.id, ...doc.data() } as QuizResult);
+      const existing: QuizResult[] = JSON.parse(localStorage.getItem(LOCAL_STORAGE_KEY) || '[]');
+      const sorted = existing.sort((a, b) => {
+        if (b.score !== a.score) return b.score - a.score;
+        return a.submittedAt - b.submittedAt;
       });
-      setLeaderboard(results);
+      setLeaderboard(sorted);
       setAppState('leaderboard');
     } catch (err) {
       console.error('Error fetching leaderboard:', err);
     }
+  };
+
+  const resetToSetup = () => {
+    setAppState('setup');
+    setTeamName('');
+    setAnswers({});
+    setError('');
   };
 
   return (
@@ -126,20 +105,6 @@ export default function App() {
             <Trophy className="w-6 h-6 text-yellow-400" />
             Hội thi tìm hiểu Nghị quyết Đại hội XIV
           </h1>
-          {user && (
-            <div className="flex items-center gap-4">
-              <span className="hidden md:inline text-sm bg-blue-800 px-3 py-1 rounded-full">
-                {user.displayName}
-              </span>
-              <button 
-                onClick={handleLogout}
-                className="p-2 hover:bg-blue-800 rounded-full transition-colors"
-                title="Đăng xuất"
-              >
-                <LogOut className="w-5 h-5" />
-              </button>
-            </div>
-          )}
         </div>
       </header>
 
@@ -151,56 +116,39 @@ export default function App() {
           </div>
         )}
 
-        {appState === 'auth' && (
+        {appState === 'setup' && (
           <div className="bg-white p-8 rounded-xl shadow-sm border border-slate-200 max-w-md mx-auto mt-10">
             <h2 className="text-2xl font-bold text-center mb-6 text-slate-800">Đăng ký dự thi</h2>
             
-            {!user ? (
-              <div className="text-center">
-                <p className="text-slate-600 mb-6">Vui lòng đăng nhập bằng tài khoản Google để bắt đầu.</p>
-                <button 
-                  onClick={handleLogin}
-                  className="w-full flex items-center justify-center gap-3 bg-white border border-slate-300 text-slate-700 font-medium py-3 px-4 rounded-lg hover:bg-slate-50 transition-colors shadow-sm"
-                >
-                  <svg className="w-5 h-5" viewBox="0 0 24 24">
-                    <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
-                    <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
-                    <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05" />
-                    <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
-                  </svg>
-                  Đăng nhập với Google
-                </button>
+            <div className="space-y-4">
+              <div>
+                <label htmlFor="teamName" className="block text-sm font-medium text-slate-700 mb-1">
+                  Tên đội thi / Người dự thi
+                </label>
+                <input
+                  type="text"
+                  id="teamName"
+                  value={teamName}
+                  onChange={(e) => setTeamName(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && startQuiz()}
+                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
+                  placeholder="Nhập tên đội của bạn..."
+                  maxLength={100}
+                />
               </div>
-            ) : (
-              <div className="space-y-4">
-                <div>
-                  <label htmlFor="teamName" className="block text-sm font-medium text-slate-700 mb-1">
-                    Tên đội thi / Người dự thi
-                  </label>
-                  <input
-                    type="text"
-                    id="teamName"
-                    value={teamName}
-                    onChange={(e) => setTeamName(e.target.value)}
-                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
-                    placeholder="Nhập tên đội của bạn..."
-                    maxLength={100}
-                  />
-                </div>
-                <button 
-                  onClick={startQuiz}
-                  className="w-full bg-blue-600 text-white font-medium py-3 px-4 rounded-lg hover:bg-blue-700 transition-colors shadow-sm"
-                >
-                  Bắt đầu làm bài
-                </button>
-                <button 
-                  onClick={fetchLeaderboard}
-                  className="w-full bg-slate-100 text-slate-700 font-medium py-3 px-4 rounded-lg hover:bg-slate-200 transition-colors"
-                >
-                  Xem bảng xếp hạng
-                </button>
-              </div>
-            )}
+              <button 
+                onClick={startQuiz}
+                className="w-full bg-blue-600 text-white font-medium py-3 px-4 rounded-lg hover:bg-blue-700 transition-colors shadow-sm"
+              >
+                Bắt đầu làm bài
+              </button>
+              <button 
+                onClick={fetchLeaderboard}
+                className="w-full bg-slate-100 text-slate-700 font-medium py-3 px-4 rounded-lg hover:bg-slate-200 transition-colors"
+              >
+                Xem bảng xếp hạng
+              </button>
+            </div>
           </div>
         )}
 
@@ -285,6 +233,12 @@ export default function App() {
 
             <div className="flex gap-4 justify-center">
               <button 
+                onClick={resetToSetup}
+                className="bg-slate-100 text-slate-700 font-medium py-3 px-6 rounded-lg hover:bg-slate-200 transition-colors"
+              >
+                Về trang chủ
+              </button>
+              <button 
                 onClick={fetchLeaderboard}
                 className="bg-blue-600 text-white font-medium py-3 px-6 rounded-lg hover:bg-blue-700 transition-colors"
               >
@@ -302,16 +256,16 @@ export default function App() {
                 Bảng xếp hạng
               </h2>
               <button 
-                onClick={() => setAppState('auth')}
-                className="text-blue-600 hover:text-blue-800 font-medium"
+                onClick={resetToSetup}
+                className="text-blue-600 hover:text-blue-800 font-medium flex items-center gap-1"
               >
-                Quay lại
+                <ArrowLeft className="w-4 h-4" /> Quay lại
               </button>
             </div>
 
             {leaderboard.length === 0 ? (
               <div className="text-center py-12 text-slate-500">
-                Chưa có kết quả nào được ghi nhận.
+                Chưa có kết quả nào được ghi nhận trên máy này.
               </div>
             ) : (
               <div className="overflow-x-auto">
@@ -342,7 +296,7 @@ export default function App() {
                         <td className="py-4 px-4 text-center font-bold text-blue-600">{result.score}/{result.totalQuestions}</td>
                         <td className="py-4 px-4 text-right text-sm text-slate-500 flex items-center justify-end gap-1">
                           <Clock className="w-4 h-4" />
-                          {result.submittedAt ? new Date(result.submittedAt.toDate()).toLocaleString('vi-VN') : 'Đang cập nhật...'}
+                          {new Date(result.submittedAt).toLocaleString('vi-VN')}
                         </td>
                       </tr>
                     ))}
