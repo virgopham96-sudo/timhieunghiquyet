@@ -135,7 +135,7 @@ export default function App() {
         <div className="max-w-5xl mx-auto px-4 py-4 flex justify-between items-center">
           <h1 className="text-xl md:text-2xl font-bold flex items-center gap-2 cursor-pointer" onClick={handleReturnHome}>
             <Trophy className="w-6 h-6 text-yellow-400" />
-            Hội thi tìm hiểu Nghị quyết Đại hội XIV
+            Hội thi cán bộ đoàn giỏi và Tuyên truyền viên trẻ trong Thanh niên Công ty năm 2026
           </h1>
           
           {appState === 'quiz' && (
