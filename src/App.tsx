@@ -43,6 +43,8 @@ export default function App() {
   const [isLoadingLeaderboard, setIsLoadingLeaderboard] = useState(false);
   const [isClearingHistory, setIsClearingHistory] = useState(false);
   const [saveToLeaderboard, setSaveToLeaderboard] = useState(true);
+  const [clearPassword, setClearPassword] = useState('');
+  const [clearPasswordError, setClearPasswordError] = useState('');
 
   const submitQuizRef = useRef<((isAutoSubmit?: boolean | React.MouseEvent) => void) | null>(null);
 
@@ -175,6 +177,11 @@ export default function App() {
   };
 
   const processClearHistory = async () => {
+    if (clearPassword !== '12345678@') {
+      setClearPasswordError('Mật khẩu không chính xác.');
+      return;
+    }
+    setClearPasswordError('');
     setIsClearingHistory(true);
     setShowClearConfirmModal(false);
     try {
@@ -194,6 +201,8 @@ export default function App() {
   };
 
   const clearHistoryClick = () => {
+    setClearPassword('');
+    setClearPasswordError('');
     setShowClearConfirmModal(true);
   };
 
@@ -227,7 +236,7 @@ export default function App() {
           <div className="max-w-5xl mx-auto px-4 py-4 flex justify-between items-center">
             <h1 className="text-xl md:text-2xl font-bold flex items-center gap-2 cursor-pointer" onClick={handleReturnHome}>
               <Trophy className="w-6 h-6 text-yellow-400" />
-              Hội thi cán bộ đoàn giỏi và Tuyên truyền viên trẻ trong Thanh niên Công ty năm 2026
+              Hội thi cán bộ đoàn giỏi và Tuyên truyền viên trẻ trong Thanh niên Công ty 790
             </h1>
           </div>
         </header>
@@ -293,7 +302,7 @@ export default function App() {
                   onChange={(e) => setTeamName(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && confirmStartQuiz()}
                   className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-[#ea580c] focus:border-[#ea580c] outline-none transition-all"
-                  placeholder="Ví dụ: Bình Phạm Văn"
+                  placeholder="Ví dụ: Nguyễn Văn A"
                   maxLength={100}
                 />
               </div>
@@ -357,7 +366,27 @@ export default function App() {
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
             <div className="bg-white rounded-xl shadow-lg max-w-md w-full p-6">
               <h3 className="text-xl font-bold text-red-600 mb-2">Xoá lịch sử thi</h3>
-              <p className="text-slate-600 mb-6">Bạn có chắc chắn muốn xoá toàn bộ lịch sử thi trên hệ thống không? Hành động này không thể hoàn tác.</p>
+              <p className="text-slate-600 mb-4">Bạn có chắc chắn muốn xoá toàn bộ lịch sử thi trên hệ thống không? Hành động này không thể hoàn tác.</p>
+              
+              <div className="mb-6">
+                <label className="block text-sm font-medium text-slate-700 mb-2">Mật khẩu xác nhận</label>
+                <input 
+                  type="password"
+                  value={clearPassword}
+                  onChange={(e) => setClearPassword(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      processClearHistory();
+                    }
+                  }}
+                  className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 outline-none transition-all"
+                  placeholder="Nhập mật khẩu để xoá"
+                />
+                {clearPasswordError && (
+                  <p className="text-red-500 text-sm mt-2">{clearPasswordError}</p>
+                )}
+              </div>
+
               <div className="flex justify-end gap-3">
                 <button 
                   onClick={() => setShowClearConfirmModal(false)}
@@ -388,7 +417,7 @@ export default function App() {
           <div className="max-w-2xl mx-auto mt-6">
             <div className="bg-white p-8 md:p-10 rounded-lg shadow-sm border border-slate-200">
               <h2 className="text-xl md:text-2xl font-semibold text-center mb-10 text-slate-800 leading-snug">
-                Hội thi cán bộ đoàn giỏi và Tuyên truyền viên trẻ trong Thanh niên Công ty năm 2026
+                Hội thi cán bộ đoàn giỏi và Tuyên truyền viên trẻ trong Thanh niên Công ty 790
               </h2>
 
               <div className="space-y-0 text-[15px]">
@@ -424,7 +453,7 @@ export default function App() {
 
               <button 
                 onClick={handleStartClick}
-                className="w-full bg-[#ea580c] hover:bg-[#d44d08] text-white font-bold py-3.5 px-4 rounded transition-colors flex justify-center items-center gap-2 text-base shadow-sm mt-6"
+                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3.5 px-4 rounded transition-colors flex justify-center items-center gap-2 text-base shadow-sm mt-6"
               >
                 Bắt đầu thi <ChevronRight className="w-4 h-4" />
               </button>
@@ -450,14 +479,7 @@ export default function App() {
                 <div key={q.id} id={`question-${q.id}`} className="bg-white rounded border border-slate-200 overflow-hidden shadow-sm">
                   <div className="p-6">
                     <h3 className="font-bold text-slate-800 mb-1 text-base">Câu {index + 1}</h3>
-                    <p className="text-slate-800 font-medium mb-8 text-[15px]">{q.text}</p>
-                    
-                    <div className="relative text-center mb-8">
-                      <div className="absolute inset-0 flex items-center">
-                        <div className="w-full border-t border-slate-100"></div>
-                      </div>
-                      <span className="bg-white px-3 text-sm text-slate-500 relative font-medium">Chọn một đáp án đúng</span>
-                    </div>
+                    <p className="text-slate-800 font-medium mb-6 text-[15px]">{q.text}</p>
 
                     <div className="space-y-4">
                       {q.options.map((opt) => (
@@ -467,15 +489,15 @@ export default function App() {
                         >
                           <div className={`w-10 h-10 rounded-full border flex flex-shrink-0 items-center justify-center transition-colors ${
                             answers[q.id] === opt.id 
-                              ? 'border-[#2d4b8e] text-slate-800' 
-                              : 'border-slate-300 text-slate-700 group-hover:border-slate-400'
+                              ? 'border-[#2d4b8e] bg-[#2d4b8e] text-white' 
+                              : 'border-slate-300 text-slate-700 bg-white group-hover:border-slate-400'
                           }`}>
                             {opt.id}
                           </div>
                           <div className={`flex-1 border rounded-md py-3 px-4 transition-colors ${
                             answers[q.id] === opt.id 
-                              ? 'border-[#2d4b8e] text-slate-800 shadow-sm bg-white' 
-                              : 'border-slate-300 text-slate-700 group-hover:border-slate-400'
+                              ? 'border-[#2d4b8e] text-[#2d4b8e] bg-[#f0f4fb] shadow-sm font-medium' 
+                              : 'border-slate-300 text-slate-700 bg-white group-hover:border-slate-400'
                           }`}>
                             {opt.text}
                           </div>

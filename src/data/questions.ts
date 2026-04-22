@@ -260,7 +260,7 @@ export const questions: Question[] = [
       { id: "C", text: "Yếu tố quyết định thành công" },
       { id: "D", text: "Phụ thuộc vào xu thế phát triển của các nước lớn" }
     ],
-    correctAnswer: "A"
+    correctAnswer: "C"
   },
   {
     id: 24,
