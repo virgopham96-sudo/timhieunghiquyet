@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { questions, Question } from './data/questions';
-import { Trophy, CheckCircle2, AlertCircle, Clock, ArrowLeft, Home, Calendar, HelpCircle, FileText, Users, QrCode, ChevronRight, ChevronLeft, ZoomOut, ZoomIn, List, Edit, Loader2 } from 'lucide-react';
+import { Trophy, CheckCircle2, AlertCircle, Clock, ArrowLeft, Home, Calendar, HelpCircle, FileText, Users, QrCode, ChevronRight, ChevronLeft, ZoomOut, ZoomIn, List, Edit, Loader2, Trash2 } from 'lucide-react';
 import { db } from './firebase';
-import { collection, addDoc, getDocs, query, orderBy, getCountFromServer } from 'firebase/firestore';
+import { collection, addDoc, getDocs, query, orderBy, deleteDoc, doc } from 'firebase/firestore';
 
 type AppState = 'setup' | 'quiz' | 'result' | 'leaderboard';
 
@@ -12,6 +12,7 @@ interface QuizResult {
   score: number;
   totalQuestions: number;
   submittedAt: number;
+  timeTaken?: number;
 }
 
 const LOCAL_STORAGE_KEY = 'quiz_results_v1';
@@ -36,19 +37,14 @@ export default function App() {
   const [error, setError] = useState('');
   const [currentQuestions, setCurrentQuestions] = useState<Question[]>([]);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [showClearConfirmModal, setShowClearConfirmModal] = useState(false);
   const [showNameModal, setShowNameModal] = useState(false);
   const [timeLeft, setTimeLeft] = useState<number>(15 * 60);
-  const [totalAttempts, setTotalAttempts] = useState<number>(0);
   const [isLoadingLeaderboard, setIsLoadingLeaderboard] = useState(false);
+  const [isClearingHistory, setIsClearingHistory] = useState(false);
+  const [saveToLeaderboard, setSaveToLeaderboard] = useState(true);
 
   const submitQuizRef = useRef<((isAutoSubmit?: boolean | React.MouseEvent) => void) | null>(null);
-
-  useEffect(() => {
-    // Lấy tổng số lượt thi
-    getCountFromServer(collection(db, 'results')).then(snapshot => {
-      setTotalAttempts(snapshot.data().count);
-    }).catch(console.error);
-  }, []);
 
   useEffect(() => {
     if (appState === 'quiz' && timeLeft > 0) {
@@ -112,19 +108,21 @@ export default function App() {
 
     setScore(calculatedScore);
 
+    const timeTaken = (15 * 60) - timeLeft;
+
     const newResult = {
       uid: `anon_${Math.random().toString(36).substring(2, 9)}`,
       teamName: teamName.trim(),
       score: calculatedScore,
       totalQuestions: currentQuestions.length,
-      submittedAt: Date.now()
+      submittedAt: Date.now(),
+      timeTaken: timeTaken
     };
 
     try {
-      await addDoc(collection(db, 'results'), newResult);
-      
-      // Update local count
-      setTotalAttempts(prev => prev + 1);
+      if (saveToLeaderboard) {
+        await addDoc(collection(db, 'results'), newResult);
+      }
       
       setAppState('result');
       window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -152,13 +150,19 @@ export default function App() {
           teamName: data.teamName,
           score: data.score,
           totalQuestions: data.totalQuestions,
-          submittedAt: data.submittedAt
+          submittedAt: data.submittedAt,
+          timeTaken: data.timeTaken
         });
       });
 
       const sorted = results.sort((a, b) => {
         if (b.score !== a.score) return b.score - a.score;
-        return a.submittedAt - b.submittedAt; // Nếu bằng điểm, ai nộp sớm hơn xếp trên
+        // Nếu bằng điểm, ai nộp sớm hơn xếp trên (thời gian nộp),
+        // hoặc nếu có timeTaken, ai làm nhanh hơn xếp trên
+        if (a.timeTaken && b.timeTaken && a.timeTaken !== b.timeTaken) {
+            return a.timeTaken - b.timeTaken;
+        }
+        return a.submittedAt - b.submittedAt;
       });
       setLeaderboard(sorted);
       setAppState('leaderboard');
@@ -168,6 +172,29 @@ export default function App() {
     } finally {
       setIsLoadingLeaderboard(false);
     }
+  };
+
+  const processClearHistory = async () => {
+    setIsClearingHistory(true);
+    setShowClearConfirmModal(false);
+    try {
+      const q = query(collection(db, 'results'));
+      const querySnapshot = await getDocs(q);
+      const deletePromises = querySnapshot.docs.map(document => deleteDoc(doc(db, 'results', document.id)));
+      await Promise.all(deletePromises);
+      setLeaderboard([]);
+      // Instead of alert, just setting state is fine or show a local toast. Let's just clear errors.
+      setError('');
+    } catch (err) {
+      console.error('Error clearing history:', err);
+      setError('Có lỗi xảy ra khi xoá lịch sử thi.');
+    } finally {
+      setIsClearingHistory(false);
+    }
+  };
+
+  const clearHistoryClick = () => {
+    setShowClearConfirmModal(true);
   };
 
   const resetToSetup = () => {
@@ -184,6 +211,13 @@ export default function App() {
     } else {
       resetToSetup();
     }
+  };
+
+  const formatTimeTaken = (seconds?: number) => {
+    if (seconds === undefined) return 'Đang cập nhật';
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return `${m} phút ${s} giây`;
   };
 
   return (
@@ -263,6 +297,18 @@ export default function App() {
                   maxLength={100}
                 />
               </div>
+              <div className="mb-6 flex items-center gap-2">
+                <input 
+                  type="checkbox" 
+                  id="saveLeaderboard" 
+                  checked={saveToLeaderboard}
+                  onChange={(e) => setSaveToLeaderboard(e.target.checked)}
+                  className="w-4 h-4 text-[#ea580c] focus:ring-[#ea580c] rounded border-slate-300"
+                />
+                <label htmlFor="saveLeaderboard" className="text-sm font-medium text-slate-700 cursor-pointer">
+                  Lưu kết quả lên bảng xếp hạng
+                </label>
+              </div>
               <div className="flex justify-end gap-3">
                 <button 
                   onClick={() => setShowNameModal(false)}
@@ -298,9 +344,33 @@ export default function App() {
                     setShowConfirmModal(false);
                     resetToSetup();
                   }}
-                  className="px-4 py-2 bg-red-600 text-white hover:bg-red-700 rounded-lg font-medium transition-colors"
+                  className="px-5 py-2.5 bg-[#ea580c] text-white hover:bg-orange-700 rounded-lg font-medium transition-colors"
                 >
                   Thoát
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {showClearConfirmModal && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-xl shadow-lg max-w-md w-full p-6">
+              <h3 className="text-xl font-bold text-red-600 mb-2">Xoá lịch sử thi</h3>
+              <p className="text-slate-600 mb-6">Bạn có chắc chắn muốn xoá toàn bộ lịch sử thi trên hệ thống không? Hành động này không thể hoàn tác.</p>
+              <div className="flex justify-end gap-3">
+                <button 
+                  onClick={() => setShowClearConfirmModal(false)}
+                  className="px-5 py-2.5 text-slate-600 hover:bg-slate-100 rounded-lg font-medium transition-colors"
+                >
+                  Hủy
+                </button>
+                <button 
+                  onClick={processClearHistory}
+                  className="px-5 py-2.5 bg-red-600 text-white hover:bg-red-700 rounded-lg font-medium transition-colors flex items-center gap-2 relative min-w-[120px] justify-center"
+                  disabled={isClearingHistory}
+                >
+                  {isClearingHistory ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Xoá vĩnh viễn'}
                 </button>
               </div>
             </div>
@@ -350,20 +420,11 @@ export default function App() {
                   </div>
                   <span className="font-semibold text-slate-800">Trắc nghiệm</span>
                 </div>
-                <div className="flex justify-between items-center py-3 mb-6">
-                  <div className="flex items-center gap-3 text-slate-700">
-                    <Users className="w-[18px] h-[18px] text-slate-600" />
-                    <span>Tổng lượt đã làm của đề</span>
-                  </div>
-                  <span className="font-semibold text-slate-800">
-                    {totalAttempts} lượt
-                  </span>
-                </div>
               </div>
 
               <button 
                 onClick={handleStartClick}
-                className="w-full bg-[#ea580c] hover:bg-[#d44d08] text-white font-bold py-3.5 px-4 rounded transition-colors flex justify-center items-center gap-2 text-base shadow-sm"
+                className="w-full bg-[#ea580c] hover:bg-[#d44d08] text-white font-bold py-3.5 px-4 rounded transition-colors flex justify-center items-center gap-2 text-base shadow-sm mt-6"
               >
                 Bắt đầu thi <ChevronRight className="w-4 h-4" />
               </button>
@@ -513,17 +574,28 @@ export default function App() {
                 <Trophy className="w-7 h-7 text-yellow-500" />
                 Bảng xếp hạng
               </h2>
-              <button 
-                onClick={resetToSetup}
-                className="text-blue-600 hover:text-blue-800 font-medium flex items-center gap-1"
-              >
-                <ArrowLeft className="w-4 h-4" /> Quay lại
-              </button>
+              <div className="flex items-center gap-4">
+                <button 
+                  onClick={clearHistoryClick}
+                  disabled={isClearingHistory}
+                  className="text-red-500 hover:text-red-700 hover:bg-red-50 text-sm font-medium flex items-center gap-1.5 px-3 py-1.5 rounded transition-colors disabled:opacity-50"
+                  title="Xoá toàn bộ lịch sử thi"
+                >
+                  {isClearingHistory ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                  Xoá lịch sử
+                </button>
+                <button 
+                  onClick={resetToSetup}
+                  className="text-blue-600 hover:text-blue-800 font-medium flex items-center gap-1 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded transition-colors"
+                >
+                  <ArrowLeft className="w-4 h-4" /> Quay lại
+                </button>
+              </div>
             </div>
 
             {leaderboard.length === 0 ? (
               <div className="text-center py-12 text-slate-500">
-                Chưa có kết quả nào được ghi nhận trên máy này.
+                Chưa có kết quả nào được ghi nhận.
               </div>
             ) : (
               <div className="overflow-x-auto">
@@ -533,7 +605,7 @@ export default function App() {
                       <th className="py-4 px-4 font-semibold text-slate-600 w-16 text-center">Hạng</th>
                       <th className="py-4 px-4 font-semibold text-slate-600">Tên đội</th>
                       <th className="py-4 px-4 font-semibold text-slate-600 text-center">Điểm số</th>
-                      <th className="py-4 px-4 font-semibold text-slate-600 text-right">Thời gian nộp</th>
+                      <th className="py-4 px-4 font-semibold text-slate-600 text-right">Lượng thời gian làm bài</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -552,9 +624,9 @@ export default function App() {
                         </td>
                         <td className="py-4 px-4 font-medium text-slate-800">{result.teamName}</td>
                         <td className="py-4 px-4 text-center font-bold text-blue-600">{result.score}/{result.totalQuestions}</td>
-                        <td className="py-4 px-4 text-right text-sm text-slate-500 flex items-center justify-end gap-1">
+                        <td className="py-4 px-4 text-right text-sm text-slate-500 font-medium flex items-center justify-end gap-1.5">
                           <Clock className="w-4 h-4" />
-                          {new Date(result.submittedAt).toLocaleString('vi-VN')}
+                          {formatTimeTaken(result.timeTaken)}
                         </td>
                       </tr>
                     ))}

@@ -30,7 +30,8 @@ service cloud.firestore {
     }
     
     function hasOnlyAllowedFields(fields) {
-      return request.resource.data.keys().hasOnly(fields);
+      // allow timeTaken as an optional field
+      return request.resource.data.keys().hasOnly(fields) || request.resource.data.keys().hasOnly(fields.concat(['timeTaken']));
     }
     
     function isValidResult(data) {
@@ -39,7 +40,8 @@ service cloud.firestore {
              data.teamName is string && data.teamName.size() > 0 && data.teamName.size() <= 100 &&
              data.score is number && data.score >= 0 && data.score <= 15 &&
              data.totalQuestions is number && data.totalQuestions == 15 &&
-             data.submittedAt is number;
+             data.submittedAt is number &&
+             (!('timeTaken' in data) || data.timeTaken is number);
     }
     
     match /results/{resultId} {
@@ -49,8 +51,9 @@ service cloud.firestore {
       // Users can create results (auth not strictly required if anonymous auth is disabled)
       allow create: if isValidResult(request.resource.data);
       
-      // No updates or deletes allowed for test results
-      allow update, delete: if false;
+      // No updates allowed, but allow deletes to clear history
+      allow update: if false;
+      allow delete: if true;
     }
   }
 }
