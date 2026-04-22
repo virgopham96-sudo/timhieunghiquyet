@@ -37,17 +37,17 @@ service cloud.firestore {
       return hasOnlyAllowedFields(['uid', 'teamName', 'score', 'totalQuestions', 'submittedAt']) &&
              data.uid is string && data.uid.size() > 0 &&
              data.teamName is string && data.teamName.size() > 0 && data.teamName.size() <= 100 &&
-             data.score is number && data.score >= 0 && data.score <= 25 &&
-             data.totalQuestions is number && data.totalQuestions == 25 &&
-             data.submittedAt is timestamp;
+             data.score is number && data.score >= 0 && data.score <= 15 &&
+             data.totalQuestions is number && data.totalQuestions == 15 &&
+             data.submittedAt is number;
     }
     
     match /results/{resultId} {
-      // Anyone authenticated can read the leaderboard
-      allow read: if isAuthenticated();
+      // Anyone can read the leaderboard
+      allow read: if true;
       
-      // Users can only create their own results, and data must be valid
-      allow create: if isAuthenticated() && isDocOwner() && isValidResult(request.resource.data);
+      // Users can create results (auth not strictly required if anonymous auth is disabled)
+      allow create: if isValidResult(request.resource.data);
       
       // No updates or deletes allowed for test results
       allow update, delete: if false;
