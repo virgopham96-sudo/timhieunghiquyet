@@ -243,7 +243,7 @@ export default function App() {
       )}
 
       {appState === 'quiz' && (
-        <header className="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm">
+        <header className="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm relative">
           <div className="mx-auto px-4 lg:px-8 py-3 flex flex-wrap gap-4 justify-between items-center">
             <button 
               onClick={handleReturnHome}
@@ -257,9 +257,9 @@ export default function App() {
             </div>
 
             <div className="flex items-center gap-5">
-              <div className="flex items-center gap-2 font-bold text-slate-800 text-[15px]">
-                <Clock className="w-5 h-5 text-slate-600" />
-                <span className={timeLeft < 60 ? 'text-red-600' : ''}>
+              <div className={`flex items-center gap-2 font-bold text-[15px] transition-colors ${timeLeft <= 60 ? 'text-red-600 animate-pulse' : 'text-slate-800'}`}>
+                <Clock className={`w-5 h-5 ${timeLeft <= 60 ? 'text-red-600' : 'text-slate-600'}`} />
+                <span>
                   00 : {Math.floor(timeLeft / 60).toString().padStart(2, '0')} : {(timeLeft % 60).toString().padStart(2, '0')}
                 </span>
               </div>
@@ -282,6 +282,13 @@ export default function App() {
                 <Edit className="w-4 h-4" /> Nộp bài
               </button>
             </div>
+          </div>
+          {/* Time Progress Bar */}
+          <div className="absolute bottom-0 left-0 h-1 bg-slate-100 w-full">
+            <div 
+              className={`h-full transition-all duration-1000 ease-linear ${timeLeft <= 60 ? 'bg-red-500' : 'bg-blue-600'}`}
+              style={{ width: `${(timeLeft / (15 * 60)) * 100}%` }}
+            />
           </div>
         </header>
       )}
